@@ -1,8 +1,6 @@
-
-import { GoogleGenAI, Type } from "@google/genai";
+import { Type } from "@google/genai";
 import { Character, RuleCard, EngineResult } from "../types";
-
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+import { generateContent, AIProviderConfig } from "./aiEngine";
 
 const SYSTEM_PROMPT = `
 You are the **Core Logic Engine** and **Narrative Director** for "Chronicles of the Persona".
@@ -27,6 +25,55 @@ Your role is to execute the game loop:
 - Structure: JSON matching the schema.
 `;
 
+const responseSchema = {
+  type: Type.OBJECT,
+  properties: {
+    text: { type: Type.STRING, description: "The narrative segment." },
+    statUpdates: {
+      type: Type.OBJECT,
+      properties: {
+        credibility: { type: Type.INTEGER, description: "Change amount, e.g., -1" },
+        stress: { type: Type.INTEGER, description: "Change amount, e.g., +2" },
+        connections: { type: Type.INTEGER, description: "Change amount, e.g., -1" }
+      }
+    },
+    ruleUpdates: {
+      type: Type.OBJECT,
+      properties: {
+        add: {
+          type: Type.ARRAY,
+          items: {
+            type: Type.OBJECT,
+            properties: {
+              id: { type: Type.STRING },
+              title: { type: Type.STRING },
+              type: { type: Type.STRING, enum: ['CONSTRAINT', 'BONUS', 'RISK', 'REALITY'] },
+              description: { type: Type.STRING },
+              active: { type: Type.BOOLEAN }
+            }
+          }
+        },
+        removeIds: { type: Type.ARRAY, items: { type: Type.STRING } }
+      }
+    },
+    isGameOver: { type: Type.BOOLEAN },
+    gameSummary: { type: Type.STRING, description: "Only if isGameOver is true." },
+    choices: {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          id: { type: Type.STRING },
+          text: { type: Type.STRING },
+          consequence: { type: Type.STRING },
+          cost: { type: Type.STRING },
+          risk: { type: Type.STRING }
+        }
+      }
+    }
+  }
+};
+
 export const processTurn = async (
   character: Character,
   activeRules: RuleCard[],
@@ -34,7 +81,8 @@ export const processTurn = async (
   lastChoiceText: string,
   historySummary: string,
   turnCount: number,
-  maxTurns: number
+  maxTurns: number,
+  providerConfig?: AIProviderConfig
 ): Promise<EngineResult> => {
   
   const isFinalTurn = turnCount >= maxTurns;
@@ -60,65 +108,22 @@ export const processTurn = async (
     5. ${isFinalTurn ? "This is the CLIMAX. Ignore choices generation. Set 'isGameOver': true and provide a 'gameSummary'." : "Generate 3 distinct choices for the next step."}
   `;
 
+  const config: AIProviderConfig = providerConfig || {
+    provider: 'gemini',
+    gemini: {
+      apiKey: process.env.API_KEY
+    }
+  };
+
   try {
-    const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
-      contents: prompt,
-      config: {
-        systemInstruction: SYSTEM_PROMPT,
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            text: { type: Type.STRING, description: "The narrative segment." },
-            statUpdates: {
-              type: Type.OBJECT,
-              properties: {
-                credibility: { type: Type.INTEGER, description: "Change amount, e.g., -1" },
-                stress: { type: Type.INTEGER, description: "Change amount, e.g., +2" },
-                connections: { type: Type.INTEGER, description: "Change amount, e.g., -1" }
-              }
-            },
-            ruleUpdates: {
-              type: Type.OBJECT,
-              properties: {
-                add: {
-                  type: Type.ARRAY,
-                  items: {
-                    type: Type.OBJECT,
-                    properties: {
-                      id: { type: Type.STRING },
-                      title: { type: Type.STRING },
-                      type: { type: Type.STRING, enum: ['CONSTRAINT', 'BONUS', 'RISK', 'REALITY'] },
-                      description: { type: Type.STRING },
-                      active: { type: Type.BOOLEAN }
-                    }
-                  }
-                },
-                removeIds: { type: Type.ARRAY, items: { type: Type.STRING } }
-              }
-            },
-            isGameOver: { type: Type.BOOLEAN },
-            gameSummary: { type: Type.STRING, description: "Only if isGameOver is true." },
-            choices: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  id: { type: Type.STRING },
-                  text: { type: Type.STRING },
-                  consequence: { type: Type.STRING },
-                  cost: { type: Type.STRING },
-                  risk: { type: Type.STRING }
-                }
-              }
-            }
-          }
-        }
-      }
+    const response = await generateContent(config, {
+      prompt,
+      systemInstruction: SYSTEM_PROMPT,
+      jsonSchema: responseSchema,
+      jsonMode: true
     });
 
-    const json = JSON.parse(response.text || "{}");
+    const json = JSON.parse(response);
     
     // Defensive coding for the frontend
     return {
