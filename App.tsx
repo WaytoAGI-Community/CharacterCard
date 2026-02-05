@@ -432,6 +432,13 @@ const App: React.FC = () => {
             <div className="mt-6 p-4 bg-brown-800/20 rounded border border-brown text-center">
                 <i className="fa-solid fa-gear text-2xl text-brown mb-2 animate-spin-slow opacity-50"></i>
                 <p className="text-xs text-stone-gray italic">"系统正在监听每一个抉择。"</p>
+                <button 
+                  onClick={resetGame}
+                  className="mt-3 text-xs text-paper/60 hover:text-gold transition-colors duration-300 underline underline-offset-2 decoration-dotted"
+                >
+                  <i className="fa-solid fa-rotate-right mr-1"></i>
+                  清除数据重新开始
+                </button>
             </div>
         </div>
       </div>
