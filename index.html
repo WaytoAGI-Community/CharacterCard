@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>人格编年史</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&family=Crimson+Text:ital,wght@0,400;0,600;1,400&family=Noto+Serif+Gothic:wght@400;700&display=swap" rel="stylesheet">
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              'velvet-red': '#8B0000',
+              'gold': '#D4AF37',
+              'gold-light': '#FFD700',
+              'forest-green': '#2E8B57',
+              'brown': {
+                DEFAULT: '#8B4513',
+                500: '#A0522D',
+                600: '#8B4513',
+                800: '#5D4037'
+              },
+              'stone-gray': '#698B69',
+              'paper': '#F5DEB3',
+            },
+            fontFamily: {
+              serif: ['Crimson Text', 'serif'],
+              display: ['Cinzel', 'serif'],
+              gothic: ['Noto Serif Gothic', 'serif'],
+            }
+          }
+        }
+      }
+    </script>
+    <style>
+      :root {
+        --color-velvet-red: #8B0000;
+        --color-gold: #D4AF37;
+        --color-gold-light: #FFD700;
+        --color-forest-green: #2E8B57;
+        --color-brown: #8B4513;
+        --color-stone-gray: #698B69;
+        --color-paper: #F5DEB3;
+      }
+
+      body {
+        font-family: 'Crimson Text', serif;
+        background-color: #1a0505;
+        color: var(--color-paper);
+      }
+
+      /* Custom Utilities */
+      .bg-velvet-red {
+        background-color: var(--color-velvet-red);
+        background-image: url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=");
+        background-blend-mode: multiply;
+      }
+
+      .bg-paper {
+        background-color: var(--color-paper);
+        background-image: linear-gradient(135deg, rgba(139,69,19,0.1) 25%, transparent 25%),
+                          linear-gradient(225deg, rgba(139,69,19,0.1) 25%, transparent 25%),
+                          linear-gradient(45deg, rgba(139,69,19,0.1) 25%, transparent 25%),
+                          linear-gradient(315deg, rgba(139,69,19,0.1) 25%, transparent 25%);
+        background-size: 20px 20px;
+        background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
+      }
+
+      .animate-gold-flow {
+        background: linear-gradient(90deg, var(--color-gold), var(--color-gold-light), var(--color-gold));
+        background-size: 200% auto;
+        animation: goldFlow 3s linear infinite;
+        -webkit-background-clip: text;
+        background-clip: text;
+        /* color: transparent;  Removed to allow overriding */
+      }
+      
+      .text-gold-flow {
+         background: linear-gradient(90deg, var(--color-gold), var(--color-gold-light), var(--color-gold));
+         background-size: 200% auto;
+         animation: goldFlow 3s linear infinite;
+         -webkit-background-clip: text;
+         background-clip: text;
+         color: transparent;
+      }
+
+      @keyframes goldFlow {
+        0% { background-position: 0% 50%; }
+        100% { background-position: 200% 50%; }
+      }
+
+      .animate-float {
+        animation: float 6s ease-in-out infinite;
+      }
+
+      @keyframes float {
+        0% { transform: translateY(0px); }
+        50% { transform: translateY(-10px); }
+        100% { transform: translateY(0px); }
+      }
+
+      @keyframes fireDance {
+          0%, 100% { transform: scaleY(1) translateX(-2px); opacity: 0.9; }
+          50% { transform: scaleY(1.2) translateX(2px); opacity: 1; }
+      }
+      .animate-fire {
+          animation: fireDance 1.2s ease-in-out infinite;
+      }
+
+      .scrollbar-hide::-webkit-scrollbar {
+          display: none;
+      }
+      .scrollbar-hide {
+          -ms-overflow-style: none;
+          scrollbar-width: none;
+      }
+    </style>
+
+<script type="importmap">
+{
+  "imports": {
+    "react": "https://esm.sh/react@^19.2.4",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.4/",
+    "react/": "https://esm.sh/react@^19.2.4/",
+    "@google/genai": "https://esm.sh/@google/genai@^1.40.0"
+  }
+}
+</script>
+</head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="index.tsx"></script>
+  </body>
+</html>
