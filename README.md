@@ -8,6 +8,14 @@ This contains everything you need to run your app locally.
 
 View your app in AI Studio: https://ai.studio/apps/drive/1mxxjF-3EzOO4s8wJEt0e51PyZOcoV9fn
 
+## Features
+
+- **State Persistence**: Game progress automatically saved to localStorage
+- **Enhanced AI Engine**: Robust JSON parsing with multi-provider support (Gemini/OpenAI)
+- **Centralized State Management**: Using Zustand for better performance and code organization
+
+See [MIGRATION.md](MIGRATION.md) for details on the state management and AI engine implementation.
+
 ## Run Locally
 
 **Prerequisites:**  Node.js
