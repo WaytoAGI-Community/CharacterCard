@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
-import { Phase, GameState, Character, StoryNode, RuleCard } from './types';
+
+import React, { useState, useEffect, useRef } from 'react';
+import { Phase, GameState, Character, RuleCard, EngineResult } from './types';
 import { CHARACTERS, INITIAL_RULES, INTRO_STORY } from './constants';
 import CharacterCard from './components/CharacterCard';
 import RuleCardComponent from './components/RuleCard';
-import { generateNextChapter } from './services/geminiService';
+import { processTurn } from './services/geminiService';
 
 const App: React.FC = () => {
   const [gameState, setGameState] = useState<GameState>({
@@ -12,15 +13,21 @@ const App: React.FC = () => {
     rules: INITIAL_RULES,
     storyLog: [],
     currentStory: null,
-    realityStats: { credibility: 5, stress: 2, connections: 3 }
+    realityStats: { credibility: 5, stress: 2, connections: 3 },
+    turnCount: 0,
+    maxTurns: 10, // Define game length
+    finalSummary: ""
   });
 
   const [loading, setLoading] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
 
-  // Initialize Audio (simulated music loop)
+  // Auto-scroll to bottom of story log
   useEffect(() => {
-    // In a real app, load atmospheric audio here
-  }, []);
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [gameState.storyLog, gameState.currentStory, loading]);
 
   const handleCharacterSelect = (char: Character) => {
     setGameState(prev => ({ ...prev, character: char }));
@@ -33,51 +40,95 @@ const App: React.FC = () => {
       ...prev,
       phase: Phase.GAMEPLAY,
       currentStory: INTRO_STORY,
-      storyLog: [INTRO_STORY]
+      storyLog: [INTRO_STORY],
+      turnCount: 1,
+      // Reset logic state
+      realityStats: { credibility: 5, stress: 2, connections: 3 },
+      rules: INITIAL_RULES
     }));
   };
 
   const handleChoice = async (choiceId: string, choiceText: string) => {
     if (!gameState.character) return;
     
+    // Quick local feedback / optimistic update could happen here, 
+    // but we rely on the Engine (AI) for the source of truth.
     setLoading(true);
-    
-    // 1. Update Stats based on choice (Simplified Logic)
-    // In a full implementation, the LLM would parse the 'cost/risk' and update these.
-    const newStats = { ...gameState.realityStats };
-    if (choiceText.toLowerCase().includes("aggressive") || choiceText.toLowerCase().includes("fight")) newStats.stress += 2;
-    if (choiceText.toLowerCase().includes("wait") || choiceText.toLowerCase().includes("rest")) newStats.stress = Math.max(0, newStats.stress - 1);
-    
-    // 2. Mock Rule Dynamic Change
-    const newRules = [...gameState.rules];
-    if (newStats.stress > 6 && !newRules.find(r => r.id === 'panic')) {
-      newRules.push({
-        id: 'panic',
-        title: '恐慌发作',
-        type: 'RISK',
-        description: '你呼吸急促。智力检定处于劣势。',
-        active: true
-      });
-    }
 
-    // 3. Generate Next Story Node
-    const historySummary = gameState.storyLog.map(n => n.text).join(' ').slice(-800);
-    const nextNode = await generateNextChapter(
+    const historySummary = gameState.storyLog.map(n => n.text).join(' ').slice(-1000);
+    
+    // 1. EXECUTE ENGINE (Gemini)
+    const result: EngineResult = await processTurn(
       gameState.character,
-      newRules,
+      gameState.rules.filter(r => r.active),
+      gameState.realityStats,
       choiceText,
-      historySummary
+      historySummary,
+      gameState.turnCount,
+      gameState.maxTurns
     );
 
-    setGameState(prev => ({
-      ...prev,
-      rules: newRules,
-      realityStats: newStats,
-      currentStory: nextNode,
-      storyLog: [...prev.storyLog, nextNode]
-    }));
-
     setLoading(false);
+
+    // 2. PROCESS STATE UPDATES
+    setGameState(prev => {
+        // A. Update Stats
+        const newStats = { ...prev.realityStats };
+        if (result.statUpdates.credibility) newStats.credibility += result.statUpdates.credibility;
+        if (result.statUpdates.stress) newStats.stress += result.statUpdates.stress;
+        if (result.statUpdates.connections) newStats.connections += result.statUpdates.connections;
+
+        // Clamp values
+        newStats.credibility = Math.max(0, Math.min(10, newStats.credibility));
+        newStats.stress = Math.max(0, Math.min(10, newStats.stress));
+        newStats.connections = Math.max(0, Math.min(10, newStats.connections));
+
+        // B. Update Rules
+        let newRules = [...prev.rules];
+        // Remove rules
+        if (result.ruleUpdates.removeIds) {
+            newRules = newRules.filter(r => !result.ruleUpdates.removeIds?.includes(r.id));
+        }
+        // Add rules
+        if (result.ruleUpdates.add) {
+            newRules = [...newRules, ...result.ruleUpdates.add];
+        }
+
+        // C. Check Critical Failures (Client-side guardrails in addition to AI)
+        let isGameOver = result.isGameOver;
+        let summary = result.gameSummary || "";
+
+        if (newStats.stress >= 10) {
+            isGameOver = true;
+            summary = summary || "你的理智已经破碎。世界变成了一团无法理解的色彩和尖叫。";
+        }
+        if (newStats.credibility <= 0) {
+            isGameOver = true;
+            summary = summary || "你被彻底放逐。没有城市愿意为你打开大门。";
+        }
+
+        return {
+            ...prev,
+            phase: isGameOver ? Phase.GAME_OVER : Phase.GAMEPLAY,
+            rules: newRules,
+            realityStats: newStats,
+            currentStory: result.storyNode,
+            storyLog: [...prev.storyLog, result.storyNode],
+            turnCount: prev.turnCount + 1,
+            finalSummary: summary
+        };
+    });
+  };
+
+  const restartGame = () => {
+      setGameState(prev => ({
+          ...prev,
+          phase: Phase.SELECTION,
+          character: null,
+          storyLog: [],
+          currentStory: null,
+          turnCount: 0
+      }));
   };
 
   // --- Render Functions ---
@@ -96,7 +147,6 @@ const App: React.FC = () => {
           </p>
         </div>
 
-        {/* Start Button Area (Top for visibility) */}
         <div className="z-20 flex flex-col items-center gap-4 mb-12 sticky top-4">
             <button 
               disabled={!gameState.character}
@@ -117,7 +167,6 @@ const App: React.FC = () => {
             </button>
         </div>
 
-        {/* Gallery Grid */}
         <div className="z-10 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 max-w-[1600px] mb-20 px-4">
           {CHARACTERS.map(char => (
             <div key={char.id} className="flex justify-center">
@@ -132,8 +181,53 @@ const App: React.FC = () => {
     </div>
   );
 
+  const renderGameOver = () => (
+      <div className="min-h-screen w-full bg-black flex flex-col items-center justify-center p-8 relative overflow-hidden">
+          <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/black-scales.png')] opacity-20"></div>
+          
+          <div className="z-10 max-w-2xl text-center border-[6px] border-double border-gold p-12 bg-[#1a0f0f] shadow-[0_0_100px_rgba(139,0,0,0.5)] transform animate-fade-in-up">
+              <h1 className="text-6xl font-display text-velvet-red mb-6 uppercase tracking-widest">
+                  {gameState.turnCount >= gameState.maxTurns ? "命运终结" : "旅途崩坏"}
+              </h1>
+              <div className="w-full h-1 bg-gold mb-8"></div>
+              
+              <div className="mb-8 font-serif text-2xl text-paper italic leading-relaxed">
+                  "{gameState.finalSummary || "你的故事在这里戛然而止..."}"
+              </div>
+
+              <div className="grid grid-cols-3 gap-8 mb-12 opacity-80">
+                  <div className="flex flex-col">
+                      <span className="text-stone-gray text-xs uppercase tracking-widest">最终信誉</span>
+                      <span className="text-gold font-display text-3xl">{gameState.realityStats.credibility}</span>
+                  </div>
+                   <div className="flex flex-col">
+                      <span className="text-stone-gray text-xs uppercase tracking-widest">精神残留</span>
+                      <span className="text-gold font-display text-3xl">{10 - gameState.realityStats.stress}</span>
+                  </div>
+                   <div className="flex flex-col">
+                      <span className="text-stone-gray text-xs uppercase tracking-widest">幸存回合</span>
+                      <span className="text-gold font-display text-3xl">{gameState.turnCount}</span>
+                  </div>
+              </div>
+
+              <button 
+                  onClick={restartGame}
+                  className="px-8 py-3 bg-gold text-black font-bold hover:bg-white transition-colors duration-300 font-display uppercase tracking-widest"
+              >
+                  轮回重置
+              </button>
+          </div>
+      </div>
+  );
+
   const renderGameplay = () => {
     if (!gameState.currentStory) return null;
+
+    // Helper for Roman Numerals for Acts
+    const romanTurn = (num: number) => {
+        const roman = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X"];
+        return roman[num - 1] || num;
+    };
 
     return (
       <div className="min-h-screen w-full bg-[#1a0505] flex flex-col md:flex-row text-paper overflow-hidden">
@@ -144,7 +238,6 @@ const App: React.FC = () => {
             <h2 className="text-gold font-display text-2xl mb-6 border-b border-brown pb-2 text-center">当前角色</h2>
             {gameState.character && (
                <div className="flex justify-center transform scale-75 origin-top mb-[-80px]">
-                 {/* Reusing the card component for display but non-interactive */}
                  <CharacterCard character={gameState.character} isSelected={true} />
                </div>
             )}
@@ -163,11 +256,20 @@ const App: React.FC = () => {
                 </div>
                 <div className="group">
                     <div className="flex justify-between mb-1 text-sm font-bold text-stone-gray">
-                        <span><i className="fa-solid fa-heart-crack mr-2"></i>精神压力</span> 
+                        <span><i className="fa-solid fa-brain mr-2"></i>精神压力</span> 
                         <span>{gameState.realityStats.stress}/10</span>
                     </div>
                     <div className="w-full bg-[#2c1810] h-3 rounded-full overflow-hidden border border-brown-600">
-                        <div className="bg-red-700 h-full transition-all duration-1000" style={{ width: `${gameState.realityStats.stress * 10}%` }}></div>
+                        <div className={`h-full transition-all duration-1000 ${gameState.realityStats.stress > 7 ? 'bg-red-600 animate-pulse' : 'bg-orange-700'}`} style={{ width: `${gameState.realityStats.stress * 10}%` }}></div>
+                    </div>
+                </div>
+                 <div className="group">
+                    <div className="flex justify-between mb-1 text-sm font-bold text-stone-gray">
+                        <span><i className="fa-solid fa-handshake mr-2"></i>人脉</span> 
+                        <span>{gameState.realityStats.connections}/10</span>
+                    </div>
+                    <div className="w-full bg-[#2c1810] h-3 rounded-full overflow-hidden border border-brown-600">
+                        <div className="bg-blue-700 h-full transition-all duration-1000" style={{ width: `${gameState.realityStats.connections * 10}%` }}></div>
                     </div>
                 </div>
                 </div>
@@ -177,7 +279,14 @@ const App: React.FC = () => {
 
         {/* MIDDLE COLUMN: Narrative (50%) */}
         <div className="flex-1 flex flex-col relative h-screen bg-paper/5">
-          <div className="flex-1 overflow-y-auto p-8 md:p-16 scrollbar-hide">
+          {/* Header Bar */}
+          <div className="absolute top-0 w-full h-16 bg-gradient-to-b from-black to-transparent z-20 flex justify-center items-center pointer-events-none">
+             <span className="text-gold opacity-50 font-display tracking-[0.5em] text-sm">
+                ACT {romanTurn(gameState.turnCount)} / {romanTurn(gameState.maxTurns)}
+             </span>
+          </div>
+
+          <div ref={scrollRef} className="flex-1 overflow-y-auto p-8 md:p-16 scrollbar-hide scroll-smooth">
              {/* Story Log */}
              {gameState.storyLog.slice(0, -1).map((node, idx) => (
                 <div key={idx} className="mb-12 opacity-50 text-base font-serif border-l-4 border-brown-600 pl-6 italic hover:opacity-100 transition-opacity">
@@ -190,7 +299,9 @@ const App: React.FC = () => {
                 <div className="flex items-center justify-center mb-8 text-gold opacity-80">
                    <div className="h-[1px] w-12 bg-gold"></div>
                    <i className="fa-solid fa-diamond text-sm mx-4 animate-spin-slow"></i>
-                   <span className="uppercase tracking-[0.3em] text-sm font-display">当前场景</span>
+                   <span className="uppercase tracking-[0.3em] text-sm font-display">
+                       {gameState.turnCount === 1 ? "序幕" : "当前场景"}
+                   </span>
                    <i className="fa-solid fa-diamond text-sm mx-4 animate-spin-slow"></i>
                    <div className="h-[1px] w-12 bg-gold"></div>
                 </div>
@@ -205,7 +316,10 @@ const App: React.FC = () => {
                           <i className="fa-solid fa-sun fa-spin text-6xl text-gold opacity-20"></i>
                           <i className="fa-solid fa-eye absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-2xl text-gold animate-pulse"></i>
                       </div>
-                      <span className="font-serif italic text-xl text-stone-gray animate-pulse">先知正在编织命运...</span>
+                      <span className="font-serif italic text-xl text-stone-gray animate-pulse">规则引擎正在演算后果...</span>
+                      <div className="text-xs text-brown font-mono mt-2">
+                          Checking: {gameState.rules.filter(r => r.active).map(r => r.title).slice(0, 3).join(", ")}...
+                      </div>
                    </div>
                 ) : (
                   <div className="grid gap-6 max-w-3xl mx-auto">
@@ -215,7 +329,6 @@ const App: React.FC = () => {
                         onClick={() => handleChoice(choice.id, choice.text)}
                         className="group relative p-6 bg-[#2c1810] border-2 border-brown text-left hover:bg-[#3d2216] hover:border-gold transition-all duration-300 rounded-xl overflow-hidden shadow-lg"
                       >
-                         {/* Hover Effect */}
                          <div className="absolute inset-0 bg-gold opacity-0 group-hover:opacity-5 transition-opacity"></div>
                          <div className="absolute left-0 top-0 bottom-0 w-2 bg-gold transform scale-y-0 group-hover:scale-y-100 transition-transform origin-bottom duration-300"></div>
                          
@@ -250,7 +363,6 @@ const App: React.FC = () => {
                   <RuleCardComponent key={rule.id} rule={rule} />
                ))}
                
-               {/* Inactive/Hidden Rules Hint */}
                {gameState.rules.some(r => !r.active) && (
                    <div className="text-center p-4 border border-dashed border-brown-600 opacity-50 rounded-lg">
                        <p className="text-xs text-stone-gray">隐藏的规则在黑暗中沉睡...</p>
@@ -258,10 +370,9 @@ const App: React.FC = () => {
                )}
             </div>
 
-            {/* System Status */}
             <div className="mt-6 p-4 bg-brown-800/20 rounded border border-brown text-center">
-                <i className="fa-solid fa-eye text-2xl text-brown mb-2 animate-pulse"></i>
-                <p className="text-xs text-stone-gray italic">"导演正在注视着你。"</p>
+                <i className="fa-solid fa-gear text-2xl text-brown mb-2 animate-spin-slow opacity-50"></i>
+                <p className="text-xs text-stone-gray italic">"系统正在监听每一个抉择。"</p>
             </div>
         </div>
       </div>
@@ -272,6 +383,7 @@ const App: React.FC = () => {
     <>
       {gameState.phase === Phase.SELECTION && renderSelection()}
       {gameState.phase === Phase.GAMEPLAY && renderGameplay()}
+      {gameState.phase === Phase.GAME_OVER && renderGameOver()}
     </>
   );
 };

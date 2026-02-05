@@ -1,59 +1,63 @@
-import { GoogleGenAI, Type } from "@google/genai";
-import { Character, RuleCard, StoryNode } from "../types";
 
-// Always use process.env.API_KEY as per guidelines
+import { GoogleGenAI, Type } from "@google/genai";
+import { Character, RuleCard, EngineResult } from "../types";
+
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 const SYSTEM_PROMPT = `
-You are the 'Game Director' and 'Narrative Engine' for a high-stakes, dark fantasy RPG called 'Chronicles of the Persona'.
-Your goal is to generate the next story segment based on the player's character, current rules, and previous choice.
+You are the **Core Logic Engine** and **Narrative Director** for "Chronicles of the Persona".
+Your role is to execute the game loop:
+1. **Analyze Input**: Evaluate the player's choice against the current World State, Character Stats, and **Active Rules**.
+2. **Apply Rules**: Check if any active rules (like "Murphy's Law" or "Equivalent Exchange") are triggered. 
+   - If a rule triggers, you MUST apply its consequence (e.g., increase Stress, remove a resource).
+   - You can also decide to ADD a new rule (e.g., "Wanted by Guards") or REMOVE an old one.
+3. **Generate Output**: 
+   - Write the narrative (Simplified Chinese).
+   - Calculate numeric changes to stats (Stress, Credibility, Connections).
+   - Determine if the game ends (Victory or Death).
 
-**IMPORTANT: ALL OUTPUT MUST BE IN SIMPLIFIED CHINESE (简体中文).**
+**Current Reality Mapping (Stats):**
+- **Credibility (信誉)**: < 3 means NPCs are hostile. 0 is Game Over (Exiled).
+- **Stress (精神压力)**: > 7 means hallucinations/bad decisions. 10 is Game Over (Insanity).
+- **Connections (人脉)**: Currency for help. 0 means isolation.
 
-### Directives:
-1. **Narrative Style**: Gritty, atmospheric, medieval fantasy. Use sensory details (smell of rust, sound of rain). Write in Chinese.
-2. **Character Agency**: The player's choice must matter. Reflect the consequences of their previous action immediately.
-3. **Rule Integration**: Check the 'Active Rules'. If a rule says 'Magic costs HP', and the player uses magic, mention the physical toll in the text.
-4. **Reality Mapping**: The player has 'Reality Stats' (Credibility, Stress).
-   - High Stress (>7): Distort the narrative. Describe things that might not be there.
-   - Low Credibility (<3): NPCs should be dismissive or hostile.
-5. **Dynamic Rules**: You have the authority to propose a NEW rule or Modify an existing one if the story demands it. *Currently, just weave this into the narrative text.*
-
-### Output Format:
-Return a JSON object with:
-- \`text\`: The story segment (approx 80-120 words) in Chinese.
-- \`choices\`: Exactly 3 distinct options in Chinese.
-   - \`text\`: Action description.
-   - \`consequence\`: A hint at the immediate outcome.
-   - \`risk\`: Potential downside (e.g., "高受伤风险", "社会污名").
-   - \`cost\`: Resource cost (e.g., "-10 金币", "失去荣誉").
-
-### Structure:
-- The story is a "Sequence of 3 Acts". We are currently in the ongoing narrative loop.
-- Every choice should lead to a "Consequence Chain".
+**Output Constraints:**
+- Language: **Simplified Chinese (简体中文)** ONLY.
+- Style: Dark Fantasy, Tarot aesthetics, Gritty.
+- Structure: JSON matching the schema.
 `;
 
-export const generateNextChapter = async (
+export const processTurn = async (
   character: Character,
   activeRules: RuleCard[],
-  lastChoice: string,
-  history: string
-): Promise<StoryNode> => {
+  realityStats: { credibility: number; stress: number; connections: number },
+  lastChoiceText: string,
+  historySummary: string,
+  turnCount: number,
+  maxTurns: number
+): Promise<EngineResult> => {
+  
+  const isFinalTurn = turnCount >= maxTurns;
+
   const prompt = `
-    [CURRENT STATE]
-    Character: ${character.name} (${character.title})
-    Traits: ${character.traits.join(', ')}
-    Weakness: ${character.weakness}
+    [GAME STATE]
+    Turn: ${turnCount} / ${maxTurns}
+    Character: ${character.name} (${character.title}) - Weakness: ${character.weakness}
+    Current Stats: Credibility=${realityStats.credibility}, Stress=${realityStats.stress}, Connections=${realityStats.connections}
     
-    [ACTIVE RULES]
-    ${activeRules.filter(r => r.active).map(r => `- ${r.title}: ${r.description}`).join('\n')}
+    [ACTIVE RULES REGISTRY]
+    ${activeRules.map(r => `(ID: ${r.id}) ${r.title}: ${r.description}`).join('\n')}
     
     [NARRATIVE CONTEXT]
-    Previous Events: ${history}
-    Player Action: "${lastChoice}"
+    Story So Far: ${historySummary}
+    **Player Action**: "${lastChoiceText}"
     
-    [TASK]
-    Generate the next scene in Simplified Chinese. Make it impactful.
+    [DIRECTIVES]
+    1. Based on the player action and active rules, determine what happens next.
+    2. Did any rule trigger? If "Murphy's Law" is active and they tried a complex plan, fail it.
+    3. Update Stats: Did they get hurt? (Stress +). Did they offend someone? (Credibility -).
+    4. **Rule Evolution**: If the story shifts significantly, you may Add a Rule (e.g., "Injury") or Remove one.
+    5. ${isFinalTurn ? "This is the CLIMAX. Ignore choices generation. Set 'isGameOver': true and provide a 'gameSummary'." : "Generate 3 distinct choices for the next step."}
   `;
 
   try {
@@ -66,7 +70,36 @@ export const generateNextChapter = async (
         responseSchema: {
           type: Type.OBJECT,
           properties: {
-            text: { type: Type.STRING },
+            text: { type: Type.STRING, description: "The narrative segment." },
+            statUpdates: {
+              type: Type.OBJECT,
+              properties: {
+                credibility: { type: Type.INTEGER, description: "Change amount, e.g., -1" },
+                stress: { type: Type.INTEGER, description: "Change amount, e.g., +2" },
+                connections: { type: Type.INTEGER, description: "Change amount, e.g., -1" }
+              }
+            },
+            ruleUpdates: {
+              type: Type.OBJECT,
+              properties: {
+                add: {
+                  type: Type.ARRAY,
+                  items: {
+                    type: Type.OBJECT,
+                    properties: {
+                      id: { type: Type.STRING },
+                      title: { type: Type.STRING },
+                      type: { type: Type.STRING, enum: ['CONSTRAINT', 'BONUS', 'RISK', 'REALITY'] },
+                      description: { type: Type.STRING },
+                      active: { type: Type.BOOLEAN }
+                    }
+                  }
+                },
+                removeIds: { type: Type.ARRAY, items: { type: Type.STRING } }
+              }
+            },
+            isGameOver: { type: Type.BOOLEAN },
+            gameSummary: { type: Type.STRING, description: "Only if isGameOver is true." },
             choices: {
               type: Type.ARRAY,
               items: {
@@ -87,27 +120,31 @@ export const generateNextChapter = async (
 
     const json = JSON.parse(response.text || "{}");
     
-    // Safety sanitization to prevent "Objects are not valid as React child"
-    // Sometimes the model might return a nested object for a field requested as string.
-    const safeNode: StoryNode = {
-        text: typeof json.text === 'string' ? json.text : "时间的迷雾遮蔽了细节...",
-        choices: Array.isArray(json.choices) ? json.choices.map((c: any, index: number) => ({
-            id: c.id ? String(c.id) : `choice_${index}`,
-            text: typeof c.text === 'string' ? c.text : "未知行动",
-            consequence: typeof c.consequence === 'string' ? c.consequence : "",
-            cost: typeof c.cost === 'string' ? c.cost : (c.cost ? String(c.cost) : undefined),
-            risk: typeof c.risk === 'string' ? c.risk : (c.risk ? String(c.risk) : undefined),
-        })) : []
+    // Defensive coding for the frontend
+    return {
+        storyNode: {
+            text: json.text || "迷雾笼罩...",
+            choices: json.choices || []
+        },
+        statUpdates: json.statUpdates || {},
+        ruleUpdates: {
+            add: json.ruleUpdates?.add || [],
+            removeIds: json.ruleUpdates?.removeIds || []
+        },
+        isGameOver: !!json.isGameOver,
+        gameSummary: json.gameSummary
     };
 
-    return safeNode;
   } catch (error) {
-    console.error("Gemini Gen Error", error);
+    console.error("Gemini Engine Error", error);
     return {
-      text: "命运的丝线纠缠不清，先知保持沉默。",
-      choices: [
-        { id: 'retry', text: '尝试重新连接命运', consequence: '重试生成' }
-      ]
+      storyNode: {
+        text: "现实的织锦断裂了（AI 连接错误）。",
+        choices: [{ id: 'retry', text: '试图修补现实', consequence: '重试' }]
+      },
+      statUpdates: {},
+      ruleUpdates: {},
+      isGameOver: false
     };
   }
 };
