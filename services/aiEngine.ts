@@ -32,8 +32,6 @@ And you should always end the block with a "\`\`\`" to indicate the end of the J
 
 IMPORTANT: You must output exactly one top-level JSON object inside a single fenced code block that starts with \`\`\`json and ends with \`\`\`.
 IMPORTANT: You must only output one such fenced code block per response, without any additional code blocks or text outside it.
-IMPORTANT: You must only output one such fenced code block per response, without any additional code blocks or text outside it.
-IMPORTANT: You must only output one such fenced code block per response, without any additional code blocks or text outside it.
 
 <instructions>
 `;
@@ -279,8 +277,8 @@ export const generateContent = async (
     // Wrap message with JSON_FORMAT_PREFIX and JSON_FORMAT_SUFFIX if jsonMode is enabled
     const enhancedSystemMessage = request.jsonMode
       ? (request.systemInstruction
-          ? `${JSON_FORMAT_PREFIX}${request.systemInstruction}${schemaDescription}\n</instructions>\n${JSON_FORMAT_SUFFIX}`
-          : `${JSON_FORMAT_PREFIX}${schemaDescription}\n</instructions>\n${JSON_FORMAT_SUFFIX}`)
+          ? `${JSON_FORMAT_PREFIX}${request.systemInstruction}${schemaDescription}${JSON_FORMAT_SUFFIX}`
+          : `${JSON_FORMAT_PREFIX}${schemaDescription}${JSON_FORMAT_SUFFIX}`)
       : request.systemInstruction;
 
     const messages: any[] = [];
@@ -300,7 +298,6 @@ export const generateContent = async (
       if (request.jsonMode) {
         // Parse AI response using enhanced parser
         const parsed = parseAIResponse(completion.choices[0].message.content || "");
-        console.log("JSON parsed successfully", parsed);
         return JSON.stringify(parsed);
       } else {
         // Return raw response for non-JSON mode

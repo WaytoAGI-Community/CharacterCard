@@ -9,7 +9,7 @@ import {
   useProvider, useSetProvider, useGeminiKey, useSetGeminiKey, 
   useOpenaiConfig, useSetOpenaiConfig 
 } from './store';
-import { AIConfig } from './services/aiEngine';
+import { AIConfig, ServiceProvider } from './services/aiEngine';
 
 const App: React.FC = () => {
   const gameState = useGameState();
@@ -300,7 +300,7 @@ const App: React.FC = () => {
                 <label className="block text-sm font-bold mb-2">AI 提供商</label>
                 <select 
                   value={provider}
-                  onChange={(e) => setProvider(e.target.value as any)}
+                  onChange={(e) => setProvider(e.target.value as ServiceProvider)}
                   className="w-full bg-[#2c1810] border border-brown text-paper p-2 rounded"
                 >
                   <option value="gemini">Gemini</option>
