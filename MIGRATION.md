@@ -43,11 +43,21 @@ function MyComponent() {
 - `useMaxTurns()` - Maximum turns in game
 - `useFinalSummary()` - Game over summary
 - `useLoading()` - Loading state
+- `useShowAiSettings()` - AI settings modal visibility
+- `useProvider()` - Current AI provider ('gemini' or 'openai')
+- `useGeminiKey()` - Gemini API key
+- `useOpenaiConfig()` - OpenAI configuration
 
 **State Actions:**
 - `useSetPhase()` - Update game phase
 - `useSetCharacter()` - Set selected character
 - `useSetRules()` - Update game rules
+- `useResetGame()` - Reset game to initial state
+- `useStartNewGame()` - Start a new game with a character
+- `useSetShowAiSettings()` - Toggle AI settings modal
+- `useSetProvider()` - Set AI provider
+- `useSetGeminiKey()` - Update Gemini API key
+- `useSetOpenaiConfig()` - Update OpenAI configuration
 - `useResetGame()` - Reset game to initial state
 - `useStartNewGame()` - Start a new game with a character
 
@@ -153,21 +163,49 @@ export const gameStore = create<GameStoreState & GameStoreActions>()(
 
 ### AI Engine Integration
 
-The game service now uses the enhanced AI engine:
+The game service now uses the enhanced AI engine with configurable providers:
 ```typescript
-const result = await generateContent(config, {
-  prompt: buildPrompt(),
-  systemInstruction: SYSTEM_PROMPT,
-  jsonSchema: responseSchema,
-  jsonMode: true
-});
+// Build provider config from store
+const providerConfig = {
+  provider,
+  gemini: geminiKey ? { apiKey: geminiKey } : undefined,
+  openai: provider === 'openai' ? openaiConfig : undefined
+};
+
+// Pass config to AI engine
+const result = await processTurn(
+  character,
+  activeRules,
+  realityStats,
+  choiceText,
+  historySummary,
+  turnCount,
+  maxTurns,
+  providerConfig
+);
 ```
+
+### AI Configuration UI
+
+A settings modal component allows users to:
+- Switch between Gemini and OpenAI providers
+- Configure API keys and settings for each provider
+- Persist configuration to localStorage
+- Access settings from any game phase via gear icon button
+
+The modal features:
+- Dark fantasy themed UI matching the game aesthetic
+- Conditional form fields based on selected provider
+- Real-time provider switching
+- Automatic configuration persistence
 
 ## Testing
 
 The implementation has been tested for:
 - ✅ State persistence and restoration
 - ✅ JSON parsing with various formats
+- ✅ AI configuration UI functionality
+- ✅ Provider switching and configuration persistence
 - ✅ Build compilation
 - ✅ Code quality (code review passed)
 - ✅ Security (CodeQL scan passed with 0 alerts)
