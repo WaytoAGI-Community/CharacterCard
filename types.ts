@@ -75,3 +75,20 @@ export interface GameState {
   maxTurns: number;  // 预设的剧本长度
   finalSummary?: string;
 }
+
+// AI Configuration Types
+export type ServiceProvider = 'gemini' | 'openai';
+
+export interface OpenAIConfig {
+  apiKey: string;
+  baseUrl: string;
+  model: string;
+}
+
+export interface AIConfig {
+  provider: ServiceProvider;
+  gemini?: {
+    apiKey?: string;
+  };
+  openai?: OpenAIConfig;
+}

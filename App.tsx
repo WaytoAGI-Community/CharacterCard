@@ -3,6 +3,7 @@ import { Phase, Character, EngineResult } from './types';
 import { CHARACTERS } from './constants';
 import CharacterCard from './components/CharacterCard';
 import RuleCardComponent from './components/RuleCard';
+import { AiSettingsModal } from './components/AiSettingsModal';
 import { processTurn } from './services/geminiService';
 import {
   usePhase,
@@ -26,6 +27,10 @@ import {
   useSetLoading,
   useResetGame,
   useStartNewGame,
+  useProvider,
+  useGeminiKey,
+  useOpenaiConfig,
+  useSetShowAiSettings,
 } from './store';
 
 const App: React.FC = () => {
@@ -40,6 +45,12 @@ const App: React.FC = () => {
   const maxTurns = useMaxTurns();
   const finalSummary = useFinalSummary();
   const loading = useLoading();
+
+  // AI Configuration
+  const provider = useProvider();
+  const geminiKey = useGeminiKey();
+  const openaiConfig = useOpenaiConfig();
+  const setShowAiSettings = useSetShowAiSettings();
 
   // Actions
   const setPhase = useSetPhase();
@@ -78,7 +89,14 @@ const App: React.FC = () => {
 
     const historySummary = storyLog.map(n => n.text).join(' ').slice(-1000);
     
-    // 1. EXECUTE ENGINE (Gemini)
+    // Build AI provider config from store
+    const providerConfig = {
+      provider,
+      gemini: geminiKey ? { apiKey: geminiKey } : undefined,
+      openai: provider === 'openai' ? openaiConfig : undefined
+    };
+    
+    // 1. EXECUTE ENGINE with provider config
     const result: EngineResult = await processTurn(
       character,
       rules.filter(r => r.active),
@@ -86,7 +104,8 @@ const App: React.FC = () => {
       choiceText,
       historySummary,
       turnCount,
-      maxTurns
+      maxTurns,
+      providerConfig
     );
 
     setLoading(false);
@@ -151,6 +170,15 @@ const App: React.FC = () => {
         {/* Background Overlay */}
         <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(circle,transparent_20%,#000000_100%)] opacity-80 fixed"></div>
         
+        {/* Settings Button */}
+        <button
+          onClick={() => setShowAiSettings(true)}
+          className="fixed top-6 right-6 z-30 p-4 bg-brown-800/80 hover:bg-brown-700 border-2 border-gold/50 hover:border-gold text-gold rounded-full shadow-lg hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] transition-all group"
+          title="AI 设置"
+        >
+          <i className="fa-solid fa-cog text-xl group-hover:rotate-90 transition-transform duration-300"></i>
+        </button>
+        
         <div className="z-10 text-center mb-12 mt-8 animate-float">
           <h1 className="text-5xl md:text-7xl font-bold text-gold-flow mb-4 drop-shadow-lg font-display">
             人格编年史
@@ -198,6 +226,15 @@ const App: React.FC = () => {
       <div className="min-h-screen w-full bg-black flex flex-col items-center justify-center p-8 relative overflow-hidden">
           <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/black-scales.png')] opacity-20"></div>
           
+          {/* Settings Button */}
+          <button
+            onClick={() => setShowAiSettings(true)}
+            className="fixed top-6 right-6 z-30 p-4 bg-brown-800/80 hover:bg-brown-700 border-2 border-gold/50 hover:border-gold text-gold rounded-full shadow-lg hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] transition-all group"
+            title="AI 设置"
+          >
+            <i className="fa-solid fa-cog text-xl group-hover:rotate-90 transition-transform duration-300"></i>
+          </button>
+          
           <div className="z-10 max-w-2xl text-center border-[6px] border-double border-gold p-12 bg-[#1a0f0f] shadow-[0_0_100px_rgba(139,0,0,0.5)] transform animate-fade-in-up">
               <h1 className="text-6xl font-display text-velvet-red mb-6 uppercase tracking-widest">
                   {turnCount >= maxTurns ? "命运终结" : "旅途崩坏"}
@@ -243,7 +280,16 @@ const App: React.FC = () => {
     };
 
     return (
-      <div className="min-h-screen w-full bg-[#1a0505] flex flex-col md:flex-row text-paper overflow-hidden">
+      <div className="min-h-screen w-full bg-[#1a0505] flex flex-col md:flex-row text-paper overflow-hidden relative">
+        
+        {/* Settings Button */}
+        <button
+          onClick={() => setShowAiSettings(true)}
+          className="fixed top-6 right-6 z-30 p-3 bg-brown-800/80 hover:bg-brown-700 border-2 border-gold/50 hover:border-gold text-gold rounded-full shadow-lg hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] transition-all group"
+          title="AI 设置"
+        >
+          <i className="fa-solid fa-cog text-lg group-hover:rotate-90 transition-transform duration-300"></i>
+        </button>
         
         {/* LEFT COLUMN: Character & Stats (25%) */}
         <div className="hidden md:flex flex-col w-1/4 bg-[#0f0303] border-r-4 border-brown-600 p-6 relative shadow-2xl z-10">
@@ -397,6 +443,7 @@ const App: React.FC = () => {
       {phase === Phase.SELECTION && renderSelection()}
       {phase === Phase.GAMEPLAY && renderGameplay()}
       {phase === Phase.GAME_OVER && renderGameOver()}
+      <AiSettingsModal />
     </>
   );
 };

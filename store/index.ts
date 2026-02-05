@@ -1,12 +1,17 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
-import { GameState, Phase, Character, RuleCard, StoryNode } from "../types";
+import { GameState, Phase, Character, RuleCard, StoryNode, ServiceProvider, OpenAIConfig } from "../types";
 import { INITIAL_RULES, INTRO_STORY } from "../constants";
 
 const localStorageStorage = createJSONStorage(() => localStorage);
 
 export interface GameStoreState extends GameState {
   loading: boolean;
+  // AI Configuration
+  showAiSettings: boolean;
+  provider: ServiceProvider;
+  geminiKey: string;
+  openaiConfig: OpenAIConfig;
 }
 
 export interface GameStoreActions {
@@ -23,6 +28,11 @@ export interface GameStoreActions {
   updateGameState: (updater: (prev: GameState) => Partial<GameState>) => void;
   resetGame: () => void;
   startNewGame: (character: Character) => void;
+  // AI Configuration Actions
+  setShowAiSettings: (show: boolean) => void;
+  setProvider: (provider: ServiceProvider) => void;
+  setGeminiKey: (key: string) => void;
+  setOpenaiConfig: (config: OpenAIConfig | ((prev: OpenAIConfig) => OpenAIConfig)) => void;
 }
 
 const initialState: GameStoreState = {
@@ -36,6 +46,15 @@ const initialState: GameStoreState = {
   maxTurns: 10,
   finalSummary: undefined,
   loading: false,
+  // AI Configuration
+  showAiSettings: false,
+  provider: 'gemini',
+  geminiKey: '',
+  openaiConfig: {
+    apiKey: '',
+    baseUrl: 'https://api.openai.com/v1',
+    model: 'gpt-4-turbo-preview'
+  }
 };
 
 export const gameStore = create<GameStoreState & GameStoreActions>()(
@@ -103,6 +122,18 @@ export const gameStore = create<GameStoreState & GameStoreActions>()(
           finalSummary: undefined,
           loading: false,
         }),
+      
+      // AI Configuration Actions
+      setShowAiSettings: (show) => set({ showAiSettings: show }),
+      
+      setProvider: (provider) => set({ provider }),
+      
+      setGeminiKey: (key) => set({ geminiKey: key }),
+      
+      setOpenaiConfig: (config) =>
+        set((state) => ({
+          openaiConfig: typeof config === 'function' ? config(state.openaiConfig) : config
+        })),
     }),
     {
       name: "character-card-game-store",
@@ -118,6 +149,10 @@ export const gameStore = create<GameStoreState & GameStoreActions>()(
         turnCount: state.turnCount,
         maxTurns: state.maxTurns,
         finalSummary: state.finalSummary,
+        // Persist AI configuration
+        provider: state.provider,
+        geminiKey: state.geminiKey,
+        openaiConfig: state.openaiConfig,
       }),
     }
   )
@@ -135,6 +170,13 @@ export const useMaxTurns = () => gameStore((s) => s.maxTurns);
 export const useFinalSummary = () => gameStore((s) => s.finalSummary);
 export const useLoading = () => gameStore((s) => s.loading);
 
+// AI Configuration hooks
+export const useShowAiSettings = () => gameStore((s) => s.showAiSettings);
+export const useProvider = () => gameStore((s) => s.provider);
+export const useGeminiKey = () => gameStore((s) => s.geminiKey);
+export const useOpenaiConfig = () => gameStore((s) => s.openaiConfig);
+
+// Action hooks
 export const useSetPhase = () => gameStore((s) => s.setPhase);
 export const useSetCharacter = () => gameStore((s) => s.setCharacter);
 export const useSetRules = () => gameStore((s) => s.setRules);
@@ -148,3 +190,9 @@ export const useSetLoading = () => gameStore((s) => s.setLoading);
 export const useUpdateGameState = () => gameStore((s) => s.updateGameState);
 export const useResetGame = () => gameStore((s) => s.resetGame);
 export const useStartNewGame = () => gameStore((s) => s.startNewGame);
+
+// AI Configuration action hooks
+export const useSetShowAiSettings = () => gameStore((s) => s.setShowAiSettings);
+export const useSetProvider = () => gameStore((s) => s.setProvider);
+export const useSetGeminiKey = () => gameStore((s) => s.setGeminiKey);
+export const useSetOpenaiConfig = () => gameStore((s) => s.setOpenaiConfig);
