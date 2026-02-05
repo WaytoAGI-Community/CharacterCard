@@ -123,8 +123,7 @@ export const gameStore = create<GameStoreState & GameStoreActions>()(
   )
 );
 
-// Convenience hooks
-export const useGameState = () => gameStore((s) => s as GameState);
+// Convenience hooks for state access
 export const usePhase = () => gameStore((s) => s.phase);
 export const useCharacter = () => gameStore((s) => s.character);
 export const useRules = () => gameStore((s) => s.rules);

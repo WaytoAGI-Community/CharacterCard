@@ -12,10 +12,7 @@ The structure of the JSON object you can found in the instructions.
 
 And you should always end the block with a "\`\`\`" to indicate the end of the JSON object.
 
-IMPORTANT: You must output exactly one top-level JSON object inside a single fenced code block that starts with \`\`\`json and ends with \`\`\`.
-IMPORTANT: You must only output one such fenced code block per response, without any additional code blocks or text outside it.
-IMPORTANT: You must only output one such fenced code block per response, without any additional code blocks or text outside it.
-IMPORTANT: You must only output one such fenced code block per response, without any additional code blocks or text outside it.
+IMPORTANT: You must output exactly one top-level JSON object inside a single fenced code block that starts with \`\`\`json and ends with \`\`\`. You must only output one such fenced code block per response, without any additional code blocks or text outside it.
 
 <instructions>
 `;
@@ -44,7 +41,7 @@ function extractJSONFromResponse(response: string): string {
   }
 
   // Strategy 1: Try to extract ```json...``` code block
-  const codeBlockPattern = /```(?:json\s+)?([\s\S]*?)```/;
+  const codeBlockPattern = /```(?:json\s*)?([\s\S]*?)```/;
   const match = response.match(codeBlockPattern);
 
   if (match && match[1]) {
@@ -295,7 +292,6 @@ export const generateContent = async (
       if (request.jsonMode) {
         // Parse AI response using enhanced parser
         const parsed = parseAIResponse(completion.choices[0].message.content || "");
-        console.log("JSON parsed successfully", parsed);
         return JSON.stringify(parsed);
       } else {
         // Return raw response for non-JSON mode
