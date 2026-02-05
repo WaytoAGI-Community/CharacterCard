@@ -1,8 +1,6 @@
-import { GoogleGenAI, Type } from "@google/genai";
+import { Type } from "@google/genai";
 import { Character, RuleCard, StoryNode } from "../types";
-
-// Always use process.env.API_KEY as per guidelines
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+import { generateContent, CompletionRequest, AIConfig } from "./aiEngine";
 
 const SYSTEM_PROMPT = `
 You are the 'Game Director' and 'Narrative Engine' for a high-stakes, dark fantasy RPG called 'Chronicles of the Persona'.
@@ -37,7 +35,8 @@ export const generateNextChapter = async (
   character: Character,
   activeRules: RuleCard[],
   lastChoice: string,
-  history: string
+  history: string,
+  aiConfig: AIConfig
 ): Promise<StoryNode> => {
   const prompt = `
     [CURRENT STATE]
@@ -57,35 +56,33 @@ export const generateNextChapter = async (
   `;
 
   try {
-    const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
-      contents: prompt,
-      config: {
-        systemInstruction: SYSTEM_PROMPT,
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            text: { type: Type.STRING },
-            choices: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  id: { type: Type.STRING },
-                  text: { type: Type.STRING },
-                  consequence: { type: Type.STRING },
-                  cost: { type: Type.STRING },
-                  risk: { type: Type.STRING }
-                }
+    const request: CompletionRequest = {
+      prompt,
+      systemInstruction: SYSTEM_PROMPT,
+      jsonMode: true,
+      jsonSchema: {
+        type: Type.OBJECT,
+        properties: {
+          text: { type: Type.STRING },
+          choices: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                id: { type: Type.STRING },
+                text: { type: Type.STRING },
+                consequence: { type: Type.STRING },
+                cost: { type: Type.STRING },
+                risk: { type: Type.STRING }
               }
             }
           }
         }
       }
-    });
+    };
 
-    const json = JSON.parse(response.text || "{}");
+    const responseText = await generateContent(aiConfig, request);
+    const json = JSON.parse(responseText || "{}");
     
     // Safety sanitization to prevent "Objects are not valid as React child"
     // Sometimes the model might return a nested object for a field requested as string.

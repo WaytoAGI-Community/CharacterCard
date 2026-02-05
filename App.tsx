@@ -1,26 +1,41 @@
-import React, { useState, useEffect } from 'react';
-import { Phase, GameState, Character, StoryNode, RuleCard } from './types';
-import { CHARACTERS, INITIAL_RULES, INTRO_STORY } from './constants';
+import React, { useEffect, useState } from 'react';
+import { Phase, Character } from './types';
+import { CHARACTERS, INTRO_STORY } from './constants';
 import CharacterCard from './components/CharacterCard';
 import RuleCardComponent from './components/RuleCard';
 import { generateNextChapter } from './services/geminiService';
+import { 
+  useGameState, useSetGameState, useLoading, useSetLoading, 
+  useProvider, useSetProvider, useGeminiKey, useSetGeminiKey, 
+  useOpenaiConfig, useSetOpenaiConfig 
+} from './store';
+import { AIConfig } from './services/aiEngine';
 
 const App: React.FC = () => {
-  const [gameState, setGameState] = useState<GameState>({
-    phase: Phase.SELECTION,
-    character: null,
-    rules: INITIAL_RULES,
-    storyLog: [],
-    currentStory: null,
-    realityStats: { credibility: 5, stress: 2, connections: 3 }
-  });
-
-  const [loading, setLoading] = useState(false);
+  const gameState = useGameState();
+  const setGameState = useSetGameState();
+  const loading = useLoading();
+  const setLoading = useSetLoading();
+  const provider = useProvider();
+  const setProvider = useSetProvider();
+  const geminiKey = useGeminiKey();
+  const setGeminiKey = useSetGeminiKey();
+  const openaiConfig = useOpenaiConfig();
+  const setOpenaiConfig = useSetOpenaiConfig();
+  const [showSettings, setShowSettings] = useState(false);
 
   // Initialize Audio (simulated music loop)
   useEffect(() => {
     // In a real app, load atmospheric audio here
   }, []);
+
+  const getAIConfig = (): AIConfig => {
+    return {
+      provider,
+      gemini: { apiKey: geminiKey || process.env.API_KEY },
+      openai: openaiConfig
+    };
+  };
 
   const handleCharacterSelect = (char: Character) => {
     setGameState(prev => ({ ...prev, character: char }));
@@ -66,7 +81,8 @@ const App: React.FC = () => {
       gameState.character,
       newRules,
       choiceText,
-      historySummary
+      historySummary,
+      getAIConfig()
     );
 
     setGameState(prev => ({
@@ -272,6 +288,90 @@ const App: React.FC = () => {
     <>
       {gameState.phase === Phase.SELECTION && renderSelection()}
       {gameState.phase === Phase.GAMEPLAY && renderGameplay()}
+      
+      {/* AI Settings Modal */}
+      {showSettings && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50" onClick={() => setShowSettings(false)}>
+          <div className="bg-[#1a0505] border-4 border-gold p-8 rounded-xl max-w-md w-full" onClick={(e) => e.stopPropagation()}>
+            <h2 className="text-2xl font-display text-gold mb-6 text-center">AI 设置</h2>
+            
+            <div className="space-y-4 text-paper">
+              <div>
+                <label className="block text-sm font-bold mb-2">AI 提供商</label>
+                <select 
+                  value={provider}
+                  onChange={(e) => setProvider(e.target.value as any)}
+                  className="w-full bg-[#2c1810] border border-brown text-paper p-2 rounded"
+                >
+                  <option value="gemini">Gemini</option>
+                  <option value="openai">OpenAI</option>
+                </select>
+              </div>
+              
+              {provider === 'gemini' && (
+                <div>
+                  <label className="block text-sm font-bold mb-2">Gemini API Key (可选)</label>
+                  <input 
+                    type="password"
+                    value={geminiKey}
+                    onChange={(e) => setGeminiKey(e.target.value)}
+                    placeholder="留空使用环境变量"
+                    className="w-full bg-[#2c1810] border border-brown text-paper p-2 rounded"
+                  />
+                </div>
+              )}
+              
+              {provider === 'openai' && (
+                <>
+                  <div>
+                    <label className="block text-sm font-bold mb-2">OpenAI API Key</label>
+                    <input 
+                      type="password"
+                      value={openaiConfig.apiKey}
+                      onChange={(e) => setOpenaiConfig({ ...openaiConfig, apiKey: e.target.value })}
+                      className="w-full bg-[#2c1810] border border-brown text-paper p-2 rounded"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-bold mb-2">Base URL</label>
+                    <input 
+                      type="text"
+                      value={openaiConfig.baseUrl}
+                      onChange={(e) => setOpenaiConfig({ ...openaiConfig, baseUrl: e.target.value })}
+                      className="w-full bg-[#2c1810] border border-brown text-paper p-2 rounded"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-bold mb-2">模型</label>
+                    <input 
+                      type="text"
+                      value={openaiConfig.model}
+                      onChange={(e) => setOpenaiConfig({ ...openaiConfig, model: e.target.value })}
+                      className="w-full bg-[#2c1810] border border-brown text-paper p-2 rounded"
+                    />
+                  </div>
+                </>
+              )}
+            </div>
+            
+            <button 
+              onClick={() => setShowSettings(false)}
+              className="w-full mt-6 bg-velvet-red text-gold border-2 border-gold p-3 rounded font-display hover:bg-gold hover:text-velvet-red transition-colors"
+            >
+              关闭
+            </button>
+          </div>
+        </div>
+      )}
+      
+      {/* Floating Settings Button */}
+      <button 
+        onClick={() => setShowSettings(true)}
+        className="fixed bottom-4 right-4 bg-velvet-red text-gold border-2 border-gold p-4 rounded-full shadow-lg hover:scale-110 transition-transform z-40"
+        title="AI 设置"
+      >
+        <i className="fa-solid fa-gear text-xl"></i>
+      </button>
     </>
   );
 };
